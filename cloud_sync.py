@@ -179,9 +179,49 @@ def fertig(job):
     return True
 
 
+LOCK = ROOT + "/lock.json"
+
+
+def sperre_nehmen(z, wer):
+    alt = lade(z, LOCK)
+    if alt:
+        try:
+            d = json.loads(alt)
+            if (P.jetzt() - P.parse_zeit(d["seit"])).total_seconds() < 50 * 60:
+                return False
+        except Exception:
+            pass
+    schreibe_bytes(z, LOCK, jdump({"wer": wer, "seit": P.iso(P.jetzt())}))
+    return True
+
+
+def letzter_lauf_min(z):
+    d = lade(z, f"{ROOT}/letzter_lauf.txt")
+    if not d:
+        return 10 ** 6
+    return (P.jetzt() - P.parse_zeit(d.decode().strip())).total_seconds() / 60
+
+
 def cmd_run(args):
-    zpfad = os.environ["UPLOAD_ZUGANG"]
+    """args: [] in der Cloud; ["--ersatz"] auf dem Mac: nur laufen, wenn die Cloud seit > 20 Min. nicht lief."""
+    zpfad = os.environ.get("UPLOAD_ZUGANG") or P.ZUGANG
     z = P.zugang()
+    wer = "mac" if "--ersatz" in args else "github"
+    if wer == "mac" and letzter_lauf_min(z) < 20:
+        return
+    if not sperre_nehmen(z, wer):
+        print("Anderer Lauf aktiv – übersprungen")
+        return
+    try:
+        _run(z, zpfad)
+        schreibe_bytes(z, f"{ROOT}/letzter_lauf.txt", P.iso(P.jetzt()).encode())
+        if wer == "mac":
+            P.log("(Ersatzlauf auf dem Mac – GitHub lief nicht)")
+    finally:
+        loesche(z, LOCK)
+
+
+def _run(z, zpfad):
     arbeit = tempfile.mkdtemp(prefix="clips_")
     qdir = os.path.join(arbeit, "_auftrag", "upload")
     os.makedirs(qdir)
