@@ -148,8 +148,8 @@ print("6) Container-Neustart, wenn Container bereits veröffentlicht war (Abstur
 e = clip("31_absturz", "Absturz-Test")
 P.cmd_add([e, "--zeit", berlin(P.jetzt() - timedelta(minutes=1)), "--nur", "instagram"])
 P.cmd_tick([])
-check(P.parse_zeit(job("31_absturz")["zeit"]) >= P.parse_zeit(job("28_speed-advice")["zeit"]) + timedelta(minutes=60),
-      "Überfälliger Clip wird mit >= 60 Min. Abstand zum letzten Post neu eingeplant")
+check(P.parse_zeit(job("31_absturz")["zeit"]) >= P.parse_zeit(job("28_speed-advice")["zeit"]) + timedelta(minutes=P.MIN_ABSTAND_MIN),
+      "Überfälliger Clip wird mit >= Mindestabstand zum letzten Post neu eingeplant")
 vorspulen(hours=2)
 for _ in range(3):
     P.cmd_tick([])
@@ -169,8 +169,8 @@ for k in range(3):
 P.cmd_tick([])
 zs = sorted(P.parse_zeit(job(f"4{k}_lawine")["zeit"]) for k in range(3))
 alle = sorted(P.parse_zeit(j["zeit"]) for j in P.alle_jobs() if P._oeffentlich(j))
-check(zs[0] >= P.jetzt() + timedelta(minutes=4) and all(b - a >= timedelta(minutes=60) for a, b in zip(alle, alle[1:])),
-      "Zeiten: " + ", ".join(f"{t.astimezone(P.TZ):%H:%M}" for t in zs) + " (alle öffentlichen Posts je >= 60 Min. Abstand)")
+check(zs[0] >= P.jetzt() + timedelta(minutes=4) and all(b - a >= timedelta(minutes=P.MIN_ABSTAND_MIN) for a, b in zip(alle, alle[1:])),
+      "Zeiten: " + ", ".join(f"{t.astimezone(P.TZ):%H:%M}" for t in zs) + " (alle öffentlichen Posts je >= Mindestabstand)")
 yt_pub = [j for j in (job(f"4{k}_lawine") for k in range(3)) if j["youtube"]["status"] == "veroeffentlicht"]
 check(len(yt_pub) <= 1, "Höchstens ein Clip geht sofort raus, Rest per YouTube-Planung")
 
