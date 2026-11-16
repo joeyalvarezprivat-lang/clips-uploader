@@ -3,7 +3,12 @@ name: Clips hochladen
 on:
   schedule:
     - cron: "*/10 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      befehl:
+        description: "Optionaler Verwaltungsbefehl vor dem Lauf, z. B.: stopp 27_clip 28_clip"
+        required: false
+        default: ""
 
 concurrency:
   group: clips-upload
@@ -25,6 +30,14 @@ jobs:
           if [ -z "$ZUGANG" ]; then echo "Secret ZUGANG fehlt"; exit 1; fi
           umask 077
           printf '%s' "$ZUGANG" > "$RUNNER_TEMP/zugang.json"
+      - name: Verwaltungsbefehl
+        if: ${{ github.event.inputs.befehl != '' }}
+        env:
+          UPLOAD_ZUGANG: ${{ runner.temp }}/zugang.json
+          BEFEHL: ${{ github.event.inputs.befehl }}
+        run: |
+          case "$BEFEHL" in stopp\ *|zeit\ *) ;; *) echo "Unbekannter Befehl"; exit 1;; esac
+          python3 cloud_sync.py $BEFEHL
       - name: Warteschlange abarbeiten
         env:
           UPLOAD_ZUGANG: ${{ runner.temp }}/zugang.json

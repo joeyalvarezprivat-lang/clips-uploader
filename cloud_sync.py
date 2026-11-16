@@ -241,12 +241,52 @@ def cmd_run(args):
     shutil.rmtree(arbeit, ignore_errors=True)
 
 
+def cmd_stopp(args):
+    """Clips nicht (weiter) veröffentlichen: offene Instagram-Posts abbrechen, geplante Facebook-Reels löschen.
+    Geplante YouTube-Shorts kann der Zugang nicht ändern (nur Upload-Rechte) -> wird gemeldet."""
+    z = P.zugang()
+    for jid in args:
+        data = lade(z, f"{Q}/{jid}.json")
+        if not data:
+            print(f"{jid}: nicht in der Warteschlange")
+            continue
+        job = json.loads(data)
+        ig = job.get("instagram") or {}
+        if ig.get("aktiv") and ig.get("status") != "veroeffentlicht":
+            if ig.get("dropbox_pfad"):
+                loesche(z, ig["dropbox_pfad"])
+            ig.update(aktiv=False, gestoppt=P.iso(P.jetzt()))
+            print(f"{jid}: Instagram gestoppt")
+        fb = job.get("facebook") or {}
+        if fb.get("aktiv") and fb.get("status") in ("wartet", "hochladen"):
+            fb.update(aktiv=False, gestoppt=P.iso(P.jetzt()))
+            print(f"{jid}: Facebook gestoppt")
+        elif fb.get("aktiv") and fb.get("status") == "geplant" and fb.get("video_id"):
+            try:
+                f = P.fb_zugang(z)
+                P.jhttp("DELETE", f"{P.FB}/{P.FB_VERSION}/{fb['video_id']}?access_token=" + P.urllib.parse.quote(f["page_token"]))
+                fb.update(status="geloescht", aktiv=False, gestoppt=P.iso(P.jetzt()))
+                print(f"{jid}: geplantes Facebook-Reel gelöscht")
+            except P.ApiFehler as e:
+                print(f"{jid}: Facebook-Löschen fehlgeschlagen: {schwaerzen(str(e))}")
+        yt = job.get("youtube") or {}
+        if yt.get("aktiv") and yt.get("status") == "wartet":
+            yt.update(aktiv=False, gestoppt=P.iso(P.jetzt()))
+            print(f"{jid}: YouTube gestoppt")
+        elif yt.get("status") == "geplant":
+            print(f"{jid}: YouTube ist schon bei YouTube eingeplant ({yt.get('url')}) – in YouTube Studio auf privat stellen")
+        job["gestoppt"] = True
+        schreibe_bytes(z, f"{Q}/{jid}.json", jdump(job))
+        verschiebe(z, f"{Q}/{jid}.json", f"{DONE}/{jid}.json")
+        loesche(z, f"{FILES}/{job['datei']}")
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     cmd, args = sys.argv[1], sys.argv[2:]
     try:
-        {"push": cmd_push, "pull-status": cmd_pull_status, "run": cmd_run, "zeit": cmd_zeit}[cmd](args)
+        {"push": cmd_push, "pull-status": cmd_pull_status, "run": cmd_run, "zeit": cmd_zeit, "stopp": cmd_stopp}[cmd](args)
     except SystemExit:
         raise
     except BaseException as e:   # nie Rohdaten (URLs mit Tokens) ins öffentliche Log
