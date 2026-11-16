@@ -733,6 +733,38 @@ def job_pfad(jid):
     return os.path.join(QUEUE, jid + ".json")
 
 
+def archiv_ordner():
+    return [QUEUE, os.path.join(CLIPS, "_auftrag", "upload_cloud"), os.path.join(CLIPS, "_auftrag", "upload_konflikt")]
+
+
+def id_vergeben(jid):
+    """True, wenn die ID schon lokal wartet oder schon in die Cloud übertragen wurde (Archiv)."""
+    return any(os.path.exists(os.path.join(d, jid + ".json")) for d in archiv_ordner())
+
+
+_NR = re.compile(r"^p?(\d{1,4})_")
+
+
+def naechste_nummer():
+    """Nächste freie Clip-Nummer über fertig/, tiktok/ (auch gepostet/), Warteschlange und Cloud-Archiv."""
+    hoch = 0
+    ordner = archiv_ordner() + [os.path.join(CLIPS, "fertig"), TIKTOK, os.path.join(TIKTOK, "gepostet")]
+    for d in ordner:
+        if not os.path.isdir(d):
+            continue
+        for f in os.listdir(d):
+            m = _NR.match(f)
+            if m:
+                hoch = max(hoch, int(m.group(1)))
+    return hoch + 1
+
+
+def cmd_nummer(args):
+    n = int(args[0]) if args else 1
+    start = naechste_nummer()
+    print(" ".join(f"{i:02d}" for i in range(start, start + n)))
+
+
 def alle_jobs():
     if not os.path.isdir(QUEUE):
         return []
@@ -772,8 +804,8 @@ def cmd_add(args):
         sys.exit("Kein Titel (--titel oder .txt mit 'TITEL:')")
     zeit = parse_zeit(a.zeit)
     jid = a.id or os.path.splitext(os.path.basename(datei))[0]
-    if os.path.exists(job_pfad(jid)):
-        sys.exit(f"Schon in der Warteschlange: {jid}")
+    if id_vergeben(jid):
+        sys.exit(f"ID schon vergeben (Warteschlange/Cloud): {jid} – neue Nummer mit `publish.py nummer` holen und Datei umbenennen")
     rel = os.path.relpath(datei, CLIPS)
     job = {"id": jid, "datei": rel if not rel.startswith("..") else datei, "zeit": iso(zeit),
            "titel": info["titel"], "caption": info["caption"], "hashtags": info["hashtags"],
@@ -1074,8 +1106,9 @@ def tiktok_paket(job):
     import shutil
     os.makedirs(TIKTOK, exist_ok=True)
     ziel = os.path.join(TIKTOK, job["id"] + ".mp4")
-    if not os.path.exists(ziel):
-        shutil.copyfile(datei_von(job), ziel)
+    quelle = datei_von(job)
+    if os.path.exists(quelle) and (not os.path.exists(ziel) or os.path.getsize(ziel) != os.path.getsize(quelle)):
+        shutil.copyfile(quelle, ziel)
     warn = ("⚠️ FREMDE MUSIK / COPYRIGHT-RISIKO: nur PRIVAT posten oder weglassen\n\n" if job.get("privat") else "")
     with open(os.path.join(TIKTOK, job["id"] + ".txt"), "w", encoding="utf-8") as f:
         f.write(warn + tiktok_text(job) + "\n")
@@ -1223,6 +1256,8 @@ def main():
          "facebook": einrichten_facebook}[args[0]](args[1:])
     elif cmd == "add":
         cmd_add(args)
+    elif cmd == "nummer":
+        cmd_nummer(args)
     elif cmd == "tick":
         cmd_tick(args)
     elif cmd == "tiktok-paket":

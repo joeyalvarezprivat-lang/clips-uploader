@@ -101,4 +101,22 @@ check(json.loads(STORE["/cloud/queue/42_limit.json"])["zeit"] == P.iso(P.parse_z
 print("5) Schwärzen")
 t = C.schwaerzen("x?access_token=EAAB12345678901234567890xyz&a=1 Bearer sl.abcdefghijklmnopqrstuvwxyz")
 check("EAAB" not in t and "sl.abc" not in t, "Tokens werden aus Logs entfernt")
+
+print("6) Keine Überschreibungen")
+os.environ["CLIPS_DIR"] = MAC
+check(P.id_vergeben("40_alle"), "übertragene ID gilt als vergeben")
+nr = P.naechste_nummer()
+check(nr == 43, f"nächste freie Nummer = 43 (ist {nr})")
+p = clip("40_alle", "Doppelt")
+try:
+    P.cmd_add([p, "--zeit", b(now + timedelta(hours=8))])
+    check(False, "add hätte abbrechen müssen")
+except SystemExit as e:
+    check("schon vergeben" in str(e), "add verweigert doppelte ID")
+vorher = STORE["/cloud/queue/40_alle.json"]
+P.speichere_json(P.job_pfad("40_alle"), {**json.loads(vorher), "zeit": P.iso(now), "youtube": {"aktiv": True, "status": "wartet"}})
+C.cmd_push([])
+check(STORE["/cloud/queue/40_alle.json"] == vorher, "push überschreibt keinen Cloud-Job")
+check(os.path.exists(os.path.join(MAC, "_auftrag", "upload_konflikt", "40_alle.json")), "Konflikt-Job beiseitegelegt")
+check(P.naechste_nummer() == 43, "Nummer zählt Konflikte mit")
 print(f"\n{ok} Prüfungen bestanden")

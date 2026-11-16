@@ -8,6 +8,8 @@ GitHub Actions führt alle ~10 Minuten `run` aus, damit Joeys Mac nachts aus sei
   pull-status  (Mac)    Status, Log und Fehler aus der Cloud holen (für _auftrag/ und TikTok-Übersicht)
   run          (Cloud)  Warteschlange laden, `publish.py tick` ausführen, Ergebnis zurückschreiben, aufräumen
   zeit ID "2026-11-17 15:00"   (Mac) Termin eines Cloud-Jobs ändern
+
+IDs sind eindeutig: push überschreibt nie einen Job, der schon in /cloud/queue oder /cloud/done liegt.
 """
 import json, os, re, subprocess, sys, tempfile, shutil
 from datetime import datetime
@@ -103,8 +105,19 @@ def cmd_push(args):
         sys.exit("Dropbox nicht eingerichtet")
     archiv = os.path.join(P.CLIPS, "_auftrag", "upload_cloud")
     os.makedirs(archiv, exist_ok=True)
+    konflikt = os.path.join(P.CLIPS, "_auftrag", "upload_konflikt")
     jobs = P.alle_jobs()
     for job in jobs:
+        # Nie einen Cloud-Job überschreiben (würde Status zurücksetzen -> Doppel-Posts)
+        if lade(z, f"{Q}/{job['id']}.json") is not None or lade(z, f"{DONE}/{job['id']}.json") is not None:
+            os.makedirs(konflikt, exist_ok=True)
+            os.replace(P.job_pfad(job["id"]), os.path.join(konflikt, job["id"] + ".json"))
+            msg = (f"{job['id']}: ID existiert schon in der Cloud – NICHT übertragen (Job liegt in _auftrag/upload_konflikt). "
+                   f"Datei mit neuer Nummer (publish.py nummer) umbenennen und neu mit add einplanen.")
+            P.log("⚠ " + msg)
+            with open(P.FEHLER_TXT, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now():%Y-%m-%d %H:%M}] {msg}\n")
+            continue
         datei = P.datei_von(job)
         rel = job["datei"] if not os.path.isabs(job["datei"]) else "fertig/" + os.path.basename(job["datei"])
         job["datei"] = rel
