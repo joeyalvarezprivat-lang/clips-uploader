@@ -1,0 +1,35 @@
+name: Clips hochladen
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: clips-upload
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Zugang bereitstellen
+        env:
+          ZUGANG: ${{ secrets.ZUGANG }}
+        run: |
+          if [ -z "$ZUGANG" ]; then echo "Secret ZUGANG fehlt"; exit 1; fi
+          umask 077
+          printf '%s' "$ZUGANG" > "$RUNNER_TEMP/zugang.json"
+      - name: Warteschlange abarbeiten
+        env:
+          UPLOAD_ZUGANG: ${{ runner.temp }}/zugang.json
+          TZ: Europe/Berlin
+        run: python3 cloud_sync.py run
+      - name: Zugang entfernen
+        if: always()
+        run: rm -f "$RUNNER_TEMP/zugang.json"
