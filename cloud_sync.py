@@ -200,7 +200,7 @@ def sperre_nehmen(z, wer):
     if alt:
         try:
             d = json.loads(alt)
-            if (P.jetzt() - P.parse_zeit(d["seit"])).total_seconds() < 50 * 60:
+            if (P.jetzt() - P.parse_zeit(d["seit"])).total_seconds() < 15 * 60:
                 return False
         except Exception:
             pass
